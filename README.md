@@ -1,2 +1,0 @@
-# shalom_world
-shalalala
