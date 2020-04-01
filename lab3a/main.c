@@ -30,7 +30,7 @@ int main() {
        free(outNumbers);
        free(outWords);
        free(buf);
-       fun2(outNumbers,outWords);
+     //  fun2(outNumbers,outWords);
        printf("\nPlease, input your next string: \n");
        buf=getstr();}
 }
