@@ -1,0 +1,240 @@
+                                            ///Задача 3б. Вариант №21///
+//  Из входного потока вводится произвольное число пар строк, состоящих из последовательности слов, кторые могут быть
+//  разделены одним или несколикими пробелами и/или знаками табуляции. Длинна каждой строки произвольна.
+/// При обработке каждой пары строк сформировать новую строку, поместив в неё нечетные слова из первой и
+/// четные слова из второй. Слова в образованной строке должны быть разделены только одним пробелом.
+//  Вывести полученную последовательность на экран
+
+
+#include <stdio.h>
+#include <malloc.h>
+
+typedef struct Item{
+    char c;
+    struct Item *next;
+}Item;
+
+int getList(Item **pptr);
+void PutList(char *msg, Item* ptr);
+Item *DeleteList(Item *ptr);
+int alpha(Item *str);
+Item* skipWord(Item *str);
+int Check(Item *str);
+Item * moveWords(Item* str1, Item* str2);
+Item *reorg(Item *str);
+Item* space(Item* ptr);
+
+
+////////////////////////////////////////////////////////////////////////////////
+int main() {
+    Item *st1, *st2, *final;
+    while((puts("Please, enter your first string:"), getList(&st1)) && (puts("Please, enter your second string:"), getList(&st2))){
+        puts("");
+        if(st1&&st2) {
+            PutList("Entered first string", st1);
+            PutList("Entered second string", st2);
+            if(Check(st1)&&Check(st2)){
+                final = moveWords(st1, st2);
+                PutList("There is your result string", final);
+                st1=DeleteList(st1);
+                st2=DeleteList(st2);
+            }else puts("Error! You want to break the program, don't you?\nRepeat :)\n");
+        }
+        else puts("Error!\n");
+    }
+    return 0;
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+
+Item * moveWords(Item* st1, Item* st2){
+    Item *str, *head, *word1, *word2, *prevWord1, *prevWord2, *tmp1, *tmp2;
+    int f = 1, f1;
+    f1=1; //first word
+
+    tmp1=reorg(st1);///peredelat'
+    tmp2=reorg(st2);
+
+    while (tmp1||tmp2) {
+        if(f){
+            while(tmp1){
+                prevWord1=tmp1;
+                word1=space(tmp1);
+                if (!word1)break;
+                if(f1){
+                    str=word1;
+                    head=str;
+                    f1=0;
+                }else {
+                    str->next=prevWord1;
+                    str=str->next;
+                    str=str->next;//first alpha
+                }
+                while(word1){
+                    if(alpha(word1->next)){
+                        word1=word1->next;
+                        str=str->next;
+                    }
+                    else break;
+                }
+                if (word1) {
+                    tmp1=word1->next;
+                }
+                else tmp1=NULL;
+                tmp1=skipWord(tmp1);
+                if(!tmp1){
+                    str->next=NULL;
+                }
+                break;
+            }
+            f=!f;
+        }else{
+            f=!f;
+            while(tmp2){
+                tmp2=skipWord(tmp2);
+                prevWord2=tmp2;
+                if (!tmp2) break;
+                str->next=prevWord2;
+                str=str->next;
+                word2=space(tmp2);
+                if (!word2) break;
+                str=str->next;//first alpha
+                while(word2){
+                    if(alpha(word2->next)){
+                        word2=word2->next;
+                        str=str->next;
+                    }
+                    else break;
+                }
+                if(word2) tmp2=word2->next;
+                else tmp2=NULL;
+                break;
+            }
+        }
+    }
+    if (str->next){
+        if(str->next->c==' '){
+            str->next=NULL;
+        }
+    }
+
+    return head;
+}
+
+int Check(Item *str){
+    Item*tmp;
+    tmp=str;
+    int i=0;
+    while(tmp){
+        if(alpha(tmp)){
+            i++;
+        }
+        tmp=tmp->next;
+    }
+    return i <= 0 ? 0 : 1;
+}
+
+Item *reorg(Item *str) { //для удаления лишних пробелов
+    Item *last = str;
+
+    if (str->next) {
+        while (last && (last->next = space(last->next))) {
+            while (last && last->next) {
+                if ((alpha(last))&&(!alpha(last->next))) {
+                    last->next->next = space(last->next);
+                    last=last->next;///
+                } else { last = last->next; }
+            }
+        }
+        return str;
+    }
+}
+
+Item* space(Item* ptr) {
+    if (ptr != NULL) {
+        while (!(alpha(ptr))){
+            ptr->c=' ';
+            ptr = ptr->next;
+            if (ptr == NULL) {
+                break;
+            }
+        }
+
+    }
+    return ptr;
+}
+
+Item* skipWord(Item *str){
+    while(str) {
+        if (!alpha(str)) {
+            str = str->next;
+        } else {
+            do {
+                str = str->next;
+            } while ((str != NULL) && alpha(str));
+            break;
+        }
+    }
+    return str;
+}
+
+void PutList(char *msg, Item *ptr){
+    printf("%s: \"", msg);
+    for(; ptr != NULL; ptr = ptr->next){
+            printf("%c", ptr->c);
+    }
+    printf("\"\n");
+}
+
+Item *DeleteList(Item *ptr)
+{
+    Item *tmp = NULL;
+    while(ptr != NULL){
+        if (ptr->c <= 0) break;
+        while((ptr != NULL)&&(ptr->c>0)){
+            tmp = ptr;
+            ptr = ptr->next;
+            free(tmp);
+            break;
+            }
+    }
+    return ptr;
+}
+
+int getList(Item **pptr)
+{
+    char buf[21], *str;
+    Item head = {'*', NULL};
+    Item *last = &head;
+    int n, rc = 1;
+    do{
+        n = scanf("%20[^\n]", buf);
+        if(n > 0){
+            for(str = buf; *str != '\0'; ++str){
+                last->next = (Item *)malloc(sizeof(Item));
+                last = last->next;
+                last->c = *str;
+            }
+            last->next = NULL;
+            continue;
+        }
+        if(n < 0){
+            DeleteList(head.next);
+            head.next = NULL;
+            rc = 0;
+        }
+        else
+            scanf("%*c");
+
+    } while(n > 0);
+    *pptr = head.next;
+    return rc;
+}
+
+int alpha(Item *str) {
+    while (str) {
+    if (((str->c >= 65) && (str->c <= 90)) || ((str->c >= 97) && (str->c <= 122)) || ((str->c >= 192))) {
+        return 1;
+    } else return 0;
+    }
+}
