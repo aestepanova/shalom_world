@@ -1,0 +1,408 @@
+///                                 Задание 4б.   Вариант 38***
+///Написать программу для работы с таблицей, использующей 2 пространства ключей, по запросам оператора.
+///Принцип перемешанной таблицы , перемешивание сложением.
+/// Добавление, удаление элемента, заданного полным ключом, поиск элемента по любому из ключей.
+
+///1 файл хранит только ключи, длину информации и позицию информации во втором файле
+///2 файл содержит саму информацию
+
+#include <stdio.h>
+#include <string.h>
+#include <malloc.h>
+#include <stdlib.h>
+
+const int SIZE=4;
+
+typedef struct Item{
+    int key1;
+    int key2;
+    int length;//длина
+    int offset;//отступ
+}Item;
+
+typedef struct ElPk {
+    int key;
+    Item* element;
+    short int busy; // 0 - позиция свободна, 1 - занята, (-1) - удалена
+}ElPk;
+
+typedef struct Table {
+    ElPk* PK[2];
+    FILE* fd;
+    char* filename;
+    int size;
+}Table;
+
+int h1(int);
+int h(int, int);
+
+int search(int, ElPk*);
+void creator(ElPk** PK);
+int insertPk(Table* T, Item*X, char*);
+int addFrom(Table* T, Item*X);
+int addElement(Table*);
+int deleteElement(Table*);
+int delInPk(Table*, int k1, int k2);
+int findElement(Table*);
+int printTable(Table*);
+void printElement(Table*, int , int );
+
+void clear(ElPk **PK);
+char* getStr();
+int getNaturalInt(int *a);
+
+int loadT(Table*);
+int newT(Table*);
+void upload(Table*);
+
+const char *msgs[] = {" 0. Quit", " 1. Add Item", " 2. Delete Item from Table ", " 3. Show Table", " 4. Find Item by key"};
+const int NMsgs = sizeof(msgs) / sizeof(msgs[0]);
+int dialog(const char *msgs[], int N);
+const char *err_msg[] = {"Ok", "Duplicate key", "Table overflow", "This element doesn't exist"};
+int (*fptr[])(Table*) = {NULL, addElement, deleteElement, printTable, findElement};
+
+int main(){
+    int rc = 0;
+    int  f = 1;
+    int a;
+    Table* T = (Table*)malloc(sizeof(Table));
+    creator(T->PK);
+    printf("Type 1 for open a file, type 2 for creating a new one: \n");
+    getNaturalInt(&a);
+    while ((a!=1)&&(a!=2)){
+        printf("Please, enter 1 or 2: \n");
+        getNaturalInt(&a);
+    }
+    switch(a){
+        case 1: a=loadT(T);
+            break;
+        case 2: a=newT(T);
+            break;
+    }
+    while ((rc = dialog(msgs, NMsgs)) && f)
+        f = fptr[rc](T);
+    upload(T);
+    fclose(T->fd);
+    clear(T->PK);
+    free(T);
+    return 0;
+}
+
+void creator(ElPk** PK) {
+    PK[0] = (ElPk*)calloc(SIZE, sizeof(ElPk));
+    PK[1] = (ElPk*)calloc(SIZE, sizeof(ElPk));
+}
+int dialog(const char *msgs[], int N){
+    char *errmsg = "";
+    int rc;
+    int i, n;
+    do{
+        puts(errmsg);
+        errmsg = "You are wrong. Repeat, please!";
+        printf("\t********** MENU **********\n");
+        for(i = 0; i < N; ++i)
+            printf("\t%s\n", msgs[i]);
+        printf("\t**************************\n");
+        puts("Make your choice: -->  ");
+        n = getNaturalInt(&rc);
+        if(n == 0)
+            rc = 0;
+    } while(rc < 0 || rc >= N);
+    return rc;
+}
+int getNaturalInt(int *a) {
+    int n;
+    do {
+        n = scanf("%d", a);
+        if (n < 0)
+            return 0;
+        if (n == 0 || *a < 0 ) {
+            printf("%s\n", "Error! Please, repeat your input: ");
+            scanf("%*[^\n]", 0);
+        }
+    } while (n == 0 || *a < 0 );
+    return 1;
+}
+char* getStr() {
+    char buf[30] = { "" };
+    int n;
+    char* a = (char*)calloc(1, sizeof(char));
+    printf(">>>Input your information:");
+    scanf("%*[\n]");
+    while (n = scanf("%29[^\n]", buf), n > 0) {
+        int c = strlen(buf) + strlen(a);
+        a = (char*)realloc(a, c);
+        a[c - strlen(buf)] = '\0';
+        strcat(a, buf);
+    }
+    if (n < 0) {
+        free(a);
+        exit(1);
+    }
+    return a;
+}
+
+int h1(int k) {
+    return (k % SIZE);
+}
+int h(int k, int i) {
+    return (h1(k) + i) % SIZE;
+}
+
+int search(int k, ElPk* PK) {
+    int i = 0, j;
+    do {
+        j = h(k, i);
+        if ((PK[j].key == k) && (PK[j].busy == 1))
+            return j;
+        else i++;
+    } while ((i != SIZE) && (PK[j].busy != 0));
+    return -1;
+}
+
+int insertPk(Table* T, Item*X, char* info) {
+    int i = 0;
+    do {
+        int j = h(X->key1, i);
+        if (T->PK[0][j].busy!=1){
+            T->PK[0][j].element=X;
+            T->PK[0][j].key = X->key1;
+            X->length = strlen(info) + 1;
+            fseek(T->fd, 0, SEEK_END);
+            T->PK[0][j].element->offset = ftell(T->fd);
+            T->PK[0][j].busy = 1;
+            break;
+        }
+        else i++;
+    } while (i != SIZE);
+    if (i == SIZE) {
+        printf(">>>The table if full. Can't add the element.\n");
+        return -1;
+    }
+    i = 0;
+    do {
+        int j = h(X->key2, i);
+        if (T->PK[1][j].busy!=1) {
+            T->PK[1][j].element=X;
+            T->PK[1][j].key = X->key2;
+            X->length = strlen(info) + 1;
+            X->offset=ftell(T->fd);
+            fwrite(info, 1, T->PK[1][j].element->length, T->fd);
+            int n = ftell(T->fd);
+            T->PK[1][j].busy = 1;
+            return 1;
+        }
+        else i++;
+    } while (i != SIZE);
+    printf(">>>The table if full. Can't add the element.\n\n");
+    return -1;
+}
+
+int addFrom(Table* T, Item*X) {
+    int i = 0;
+    do {
+        int j = h(X->key1, i);
+        if (T->PK[0][j].busy!=1){
+            T->PK[0][j].element=X;
+            T->PK[0][j].key = X->key1;
+            T->PK[0][j].busy = 1;
+            break;
+        }
+        else i++;
+    } while (i != SIZE);
+    i = 0;
+    do {
+        int j = h(X->key2, i);
+        if (T->PK[1][j].busy!=1) {
+            T->PK[1][j].element=X;
+            T->PK[1][j].key = X->key2;
+            T->PK[1][j].busy = 1;
+            break;
+        }
+        else i++;
+    } while (i != SIZE);
+    return 1;
+}
+
+int addElement(Table* T) {
+    Item* X = (Item*)malloc(sizeof(Item));
+    char* info;
+    printf(">>>Input key in first key space: ");
+    if (getNaturalInt(&(X->key1)) == 0) {
+        printf(">>>Back to main menu...\n\n");
+        return 0;
+    }
+    printf(">>>Input key in second key space: ");
+    if (getNaturalInt(&(X->key2)) == 0) {
+        printf(">>>Back to main menu...\n\n");
+        return 0;
+    }
+    if ((search(X->key1, T->PK[0]) == -1) && (search(X->key2, T->PK[1]) == -1)) {
+        info = getStr();
+        if (insertPk(T, X, info) == -1) {
+            free(info);
+            free(X);
+            return 1;
+        }
+        T->size++;
+        printf(">>>The element has successfully added.\n\n");
+    }
+    else {
+        printf("One of this keys is duplicated in its space . Cancel...\n");
+        free(X);
+    }
+    return 1;
+}
+
+int deleteElement(Table* T) {
+    int k1,k2;
+    printf(">>>Input key in first key space:");
+    if (getNaturalInt(&(k1)) == 0) {
+        printf(">>>Back to main menu...\n\n");
+        return 0;
+    }
+    printf(">>>Input key in second key space:");
+    if (getNaturalInt(&(k2)) == 0) {
+        printf(">>>Back to main menu...\n\n");
+        return 0;
+    }
+    if((search(k1,T->PK[0])!=-1)&&(search(k2,T->PK[1])!=-1)){
+        k1=delInPk(T,k1,k2);
+        T->size--;
+        printf("%s\n\n", err_msg[0]);
+        return 1;
+    }else printf("%s\n\n", err_msg[3]);
+    return -1;
+}
+
+int findElement(Table *T) {
+    int a;
+    printf(">>>Input number of key space(1 or 2):");
+    while (getNaturalInt(&a), a < 1 || a>2)
+        printf("Please, input 1 or 2: ");//из какого пространства ключей ключ
+    int key;
+    printf(">>>Input a key:");
+    getNaturalInt(&key);//сам ключ
+    int j = search(key, T->PK[a - 1]);
+    if (j != -1) {
+        printElement(T, a, j);
+        return 1;
+    }
+    printf(">>>Element hasn't been found.\n\n");
+    return -1;
+}
+
+void printElement(Table* T, int pk, int j) {
+    char* it;
+    printf("Element: \n");
+    printf("\t\tkey1: %d\n", T->PK[pk-1][j].element->key1);
+    printf("\t\tkey2: %d\n", T->PK[pk-1][j].element->key2);
+    fseek(T->fd, T->PK[pk-1][j].element->offset, SEEK_SET);
+    it = (char*)calloc((T->PK[pk - 1][j].element->length), sizeof(char));
+    fread(it, 1, T->PK[pk - 1][j].element->length, T->fd);
+    printf("\t\tinfo: %s\n\n", it);
+    free(it);
+}
+int printTable(Table *T) {
+    int l = 0, b = 0;
+    printf("=====================\n\n");
+    for (int i = 0; b < SIZE; i = (i + 1) % SIZE, b++) {
+        if (T->PK[1][i].busy == 1) {
+            printElement(T, 2, i);
+            l++;
+        }
+    }
+    if (l == 0)
+        printf("The table is empty.\n\n");
+    printf("=====================\n\n");
+    return 1;
+}
+void clear(ElPk** PK) {
+    for (int i = 0; i < SIZE; i++) {
+        if (PK[1][i].element!=NULL) {
+            free(PK[1][i].element);
+        }
+    }
+    free(PK[0]);
+    free(PK[1]);
+}
+
+int delInPk(Table* T, int k1, int k2) {
+    int i = 0,l, j;
+    l=0;
+    do {
+        j = h(k1, i);
+        if ((T->PK[0][j].key == k1) && (T->PK[0][j].busy == 1)) {
+            T->PK[0][j].busy = -1;
+            free(T->PK[0][j].element);
+            T->PK[0][j].element = NULL;
+            break;
+        }
+        else i++;
+    } while (i != SIZE);
+
+    do {
+        j = h(k2, l);
+        if ((T->PK[1][j].key == k2) && (T->PK[1][j].busy == 1)) {
+            T->PK[1][j].busy = -1;
+            return 1;
+        }
+        else l++;
+    } while (l != SIZE);
+    printf("%s\n\n", err_msg[3]);
+    return -1;
+}
+
+int loadT(Table* T) {
+    char* name;
+    int n=0;
+    int maxSize=0;
+    printf("Please, input a filename.\n");
+    name = getStr();
+    fopen_s(&(T->fd), name, "r+b");//файл открыт для чтения и записи, данные при этом не уничтожаются
+    if (T->fd == NULL) {
+        printf("This file does't exist.\n");
+        printf("Let's make a new.\n");
+        return newT(T);
+    }
+    fread(&maxSize, sizeof(int), 1, T->fd);
+    printf("Maximum possible size of table: %d\n", maxSize);
+    fread(&n, sizeof(int), 1, T->fd); //текущее кол-во элементов
+    printf("Current size of table: %d\n", n);
+    T->size=n;
+    for (int i=0; i<n;i++){
+        Item* X = (Item*)calloc(1,sizeof(Item));
+        fread(X, sizeof(Item),1,T->fd);
+        addFrom(T,X);
+    }
+    T->filename = name;
+    return 1;
+}
+
+int newT(Table* T) {
+    printf("Please, input a filename.\n");
+    char* name = getStr();
+    if ((fopen_s(&(T->fd), name, "w+b")) != 0) { //проверка существования файла
+        // создать файл для чтения и записи, если файл уже существует, он будет открыт, но все имеющиеся в файле данные будут уничтожены
+        printf("Error");
+        return 0;
+    }
+    int n=0;
+    T->size=n;
+    fwrite(&SIZE, sizeof(int), 1, T->fd); //запишем максимальный размер таблицы
+    fwrite(&n, sizeof(int), 1, T->fd); //current size of table
+    Item*it = (Item*)calloc(SIZE, sizeof(Item));
+    fwrite(it, sizeof(Item), SIZE, T->fd);
+    T->filename = name;
+    return 1;
+}
+
+void upload(Table* T) {
+    fseek(T->fd, sizeof(int), SEEK_SET); //пропускаем size
+    fwrite(&(T->size), sizeof(int), 1, T->fd);//записываем акутальный размер таблицы
+    for (int i = 0, b=0; b < SIZE; i = (i + 1) % SIZE, b++) {
+        if (T->PK[1][i].busy == 1) {
+            fwrite(T->PK[1][i].element, sizeof(Item), 1, T->fd);
+        }
+    }
+}
